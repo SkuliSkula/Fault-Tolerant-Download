@@ -11,12 +11,9 @@ public class Client extends Thread {
     private int PORT = 6789;
     private String HOST = "localhost";
     private int command ;
-
     private BufferedReader inFromUser;
     private BufferedReader inFromServer;
-
     private Socket clientSocket;
-
     private PrintWriter outToServer;
 
     public Client() {
