@@ -5,57 +5,87 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
-import java.net.UnknownHostException;
 
-public class Client {
+public class Client extends Thread {
 
-    /**
-     * Creating a protocol for the client the client sends a sentence to a
-     * server and the server reverses the sentence and sends it back
-     *
-     * @param args
-     * @throws UnknownHostException
-     * @throws IOException
-     */
+    private int PORT = 6789;
+    private String HOST = "localhost";
+    private int command ;
 
-    public static void main(String[] args) throws UnknownHostException, IOException {
+    private BufferedReader inFromUser;
+    private BufferedReader inFromServer;
 
-        final int PORT = 6789;
-        final String HOST = "localhost";
+    private Socket clientSocket;
 
-        // Create a input stream (From the keyboard)
+    private PrintWriter outToServer;
 
-        BufferedReader inFromUser = new BufferedReader(new InputStreamReader(System.in));
+    public Client() {
 
-        // Create a client socket
+        try{
+            inFromUser = new BufferedReader(new InputStreamReader(System.in));
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
-        Socket clientSocket = new Socket(HOST,PORT);
+    public void run() {
 
-        // Create input stream attached to the client socket
+        do {
+            try {
+                menu();
+            }catch (IOException e) {
+                e.printStackTrace();
+            }
 
-        BufferedReader inFromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+        }while (command != 2);
+    }
 
-        // Create output stream attached to the client socket
+    private void requestDownload() throws IOException {
 
-        PrintWriter outToServer = new PrintWriter(clientSocket.getOutputStream(),true); // true = autoFlush
+        try {
+            clientSocket = new Socket(HOST,PORT);
 
-        // Read a sentence from the user
+            inFromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 
-        System.out.println("Write a line to the server: ");
-        String sentence = inFromUser.readLine();
-        System.out.println("Client> " + sentence);
+            outToServer = new PrintWriter(clientSocket.getOutputStream());
+            outToServer = new PrintWriter(clientSocket.getOutputStream(),true); // true = autoFlush
+            outToServer.println("Download");
 
-        // Send the line to the server
+            String reversedSentence = inFromServer.readLine();
+            System.out.println("Server> " + reversedSentence);
 
-        outToServer.println(sentence);
+        }catch (IOException e) {
+            e.printStackTrace();
+        }finally {
+            System.out.println("Closing client socket...");
+            clientSocket.close();
+        }
 
-        // Read the reversed sentence from the server
 
-        String reversedSentence = inFromServer.readLine();
-        System.out.println("Server> " + reversedSentence);
+    }
 
-        // Close the connection
-        clientSocket.close();
+    private void menu() throws IOException {
+        System.out.println();
+        System.out.println("Welcome... Select an option to continue");
+        System.out.println("1: Download a file");
+        System.out.println("2: Disconnect");
+        System.out.println();
+        command = Integer.parseInt(inFromUser.readLine());
+
+        switch (command) {
+            case 1:
+                requestDownload();
+                break;
+            case 2:
+                break;
+            default:
+                break;
+        }
+    }
+
+    public static void main(String[] args) throws IOException {
+            Client c = new Client();
+            c.start();
 
     }
 }
