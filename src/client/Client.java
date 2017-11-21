@@ -2,26 +2,21 @@ package client;
 
 import java.io.*;
 import java.net.Socket;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 
 public class Client extends Thread {
 
     private int PORT = 6789;
     private String HOST = "localhost";
-    private final String FILE_TO_RECEIVED = "C:/Temp/testClient.txt";
+    private final String FILE_TO_RECEIVED = "C:/Temp/testClient.mkv";
     private int command ;
     private BufferedReader inFromUser;
     private BufferedReader inFromServer;
     private Socket clientSocket;
     private PrintWriter outToServer;
-
-    private final int FILE_SIZE = 6022386;
-    private int bytesRead;
-    private int current = 0;
     private FileOutputStream fos;
     private BufferedOutputStream bos;
+
+    private final int BUFFER_SIZE = 15000;
 
     public Client() {
 
@@ -52,41 +47,32 @@ public class Client extends Thread {
             System.out.println("Connecting...");
             inFromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 
-            outToServer = new PrintWriter(clientSocket.getOutputStream());
             outToServer = new PrintWriter(clientSocket.getOutputStream(),true); // true = autoFlush
             outToServer.println("Download");
+
+            String serverResponse = inFromServer.readLine();
+            System.out.println("File size:" + serverResponse);
             receiveFile();
 
 
         }catch (IOException e) {
             e.printStackTrace();
-        }finally {
-            System.out.println("Closing client socket...");
-            clientSocket.close();
         }
-
-
     }
 
     private void receiveFile() throws IOException {
             System.out.println("receiveFile...");
         try{
-            byte [] mybytearray  = new byte [FILE_SIZE];
             InputStream is = clientSocket.getInputStream();
             fos = new FileOutputStream(FILE_TO_RECEIVED);
             bos = new BufferedOutputStream(fos);
-            bytesRead = is.read(mybytearray,0,mybytearray.length);
-            current = bytesRead;
-
-            do {
-                bytesRead = is.read(mybytearray, current, (mybytearray.length-current));
-                if(bytesRead >= 0) current += bytesRead;
-            } while(bytesRead < -1);
-
-            bos.write(mybytearray, 0 , current);
-            bos.flush();
-            System.out.println("File " + FILE_TO_RECEIVED
-                    + " downloaded (" + current + " bytes read)");
+            int count;
+            byte[] buffer = new byte[BUFFER_SIZE];
+            while ((count = is.read(buffer)) > 0)
+            {
+                bos.write(buffer, 0, count);
+                System.out.println("Count: " + count);
+            }
 
         }catch (IOException e) {
             e.printStackTrace();
