@@ -1,21 +1,27 @@
 package server;
 
+import message.MyMessage;
+
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 
 public class Server extends Thread{
     private int PORT = 6789;
-    private final String FILEPATH = "C:/Temp/Bible.txt";
-    private final String FILE_TO_SEND = "C:/Temp/MrRobot.mkv";
-
-    private BufferedReader inFromClient;
-    //private BufferedWriter outToClient;
+    private final String FILEPATH_BIBLE = "C:/Temp/Bible.txt";
+    private final String FILE_LARGE = "C:/Temp/MrRobot.mkv";
+    private final String FILE_TEST = "C/:Temp/Test.txt";
     private ServerSocket welcomeSocket;
     private Socket connectionSocket;
-    private PrintWriter outToClient;
-
-    private final int PACKET_SIZE = 120000;
+    private ObjectInputStream objectInputStream;
+    private ObjectOutputStream objectOutputStream;
+    private boolean resume = false;
+    private final int PACKET_SIZE = 12000;
 
     public Server() {
         try {
@@ -34,41 +40,54 @@ public class Server extends Thread{
                 connectionSocket = welcomeSocket.accept();
                 System.out.println("Accepted connection : " + connectionSocket);
 
-                inFromClient = new BufferedReader(new InputStreamReader(connectionSocket.getInputStream()));
-                outToClient= new PrintWriter(connectionSocket.getOutputStream(), true); // autoFlush
-                // Read line from client
+                objectOutputStream = new ObjectOutputStream(connectionSocket.getOutputStream());
+                objectInputStream = new ObjectInputStream(connectionSocket.getInputStream());
 
-                String clientSentence = inFromClient.readLine();
+                MyMessage m = (MyMessage) objectInputStream.readObject();
+                System.out.println(m.toString());
 
-                if(clientSentence.equals("Download")) {
-                    File fileToSend = new File(FILE_TO_SEND);
-                    String fileSize = Long.toString(fileToSend.length());
-                    outToClient.println(fileSize);
-                    sendFile();
+                if(m.getOperation().equals("Download")) {
+                    if(m.getPackageReceived()>0)
+                        resume = true;
+                    objectOutputStream.writeObject(new MyMessage(resume?"Resume":"NewDownload", getFileSize(FILEPATH_BIBLE)));
+                    sendFile(m.getPackageReceived());
                 }
 
             }catch (IOException e) {
                 e.printStackTrace();
+            }catch (ClassNotFoundException e) {
+                System.out.println("Could not find custom message: " + e.getLocalizedMessage());
             }
 
         }
     }
 
-    private void sendFile() throws IOException {
+    private void sendFile(double packageAlreadyReceived) throws IOException {
 
         try{
             System.out.println("Download has started...");
-            File fileToSend = new File(FILE_TO_SEND);
-            double nosofpackets=Math.ceil((fileToSend.length())/PACKET_SIZE);
-            System.out.println("No of packets to send:" + nosofpackets);
+            File fileToSend = new File(FILEPATH_BIBLE);
+            double noOfPackets=Math.ceil(((fileToSend.length())/PACKET_SIZE));
+            System.out.println("No of packets to send:" + noOfPackets);
             BufferedInputStream bis = new BufferedInputStream(new FileInputStream(fileToSend));
             long startTime = System.currentTimeMillis();
-            for(double i=0;i<nosofpackets+1;i++) {
-                byte[] bytearray = new byte[PACKET_SIZE];
-                bis.read(bytearray, 0, bytearray.length);
+            for(double i=0;i<noOfPackets+1;i++) {
+                byte[] byteArray = new byte[PACKET_SIZE];
+                bis.read(byteArray, 0, byteArray.length);
                 System.out.println("Packet:"+(i+1));
                 OutputStream os = connectionSocket.getOutputStream();
-                os.write(bytearray, 0,bytearray.length);
+                if(i < packageAlreadyReceived) {// If packageAlreadyReceived is less then current package then don't send them
+                    System.out.println("Package already received...");
+                }else
+                    os.write(byteArray, 0,byteArray.length);
+
+                /*if(i == (noOfPackets/2)){
+                    connectionSocket.close();
+                    os.flush();
+                    os.close();
+                }*/
+
+
                 os.flush();
             }
             long endTime = System.currentTimeMillis();
@@ -90,6 +109,12 @@ public class Server extends Thread{
 
         Server s = new Server();
         s.start();
+
+    }
+
+    private double getFileSize(String filePath){
+        File fileToSend = new File(filePath);
+        return Math.ceil(fileToSend.length()/PACKET_SIZE);
 
     }
 
