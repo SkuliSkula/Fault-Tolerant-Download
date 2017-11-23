@@ -6,6 +6,9 @@ import message.ServerMessage;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.logging.FileHandler;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 
 public class Server extends Thread{
     private int PORT = 6789;
@@ -16,11 +19,12 @@ public class Server extends Thread{
     private Socket connectionSocket;
     private boolean resume = false;
     private final int PACKET_SIZE = 12000;
-
+    private Logger logger = Logger.getLogger("Server");
     public Server() {
         try {
             System.out.println("Starting server...");
             welcomeSocket = new ServerSocket(PORT);
+            constructLogger();
         }catch (IOException e) {
             e.printStackTrace();
         }
@@ -29,10 +33,11 @@ public class Server extends Thread{
 
         while (true) {
             System.out.println("Waiting for a client...");
+            logger.info("Waiting for a client");
             try{
                 // Waits for a client to contact this socket
                 connectionSocket = welcomeSocket.accept();
-                System.out.println("Accepted connection : " + connectionSocket);
+                logger.info("Client connected: " + connectionSocket);
 
                 // Create the streams to send and receive Message objects from and to the client
                 ObjectOutputStream objectOutputStream = new ObjectOutputStream(connectionSocket.getOutputStream());
@@ -41,7 +46,7 @@ public class Server extends Thread{
                 // Get the message from the client
                 ClientMessage m = (ClientMessage) objectInputStream.readObject();
                 System.out.println(m.toString());
-
+                logger.info(m.toString());
                 // Check what the message contains and do operations based on that
                 if(m.getOperation().equals("Download")) {
                     if(m.getPackageReceived()>0)
@@ -62,16 +67,13 @@ public class Server extends Thread{
     private void sendFile(double packageAlreadyReceived) throws IOException {
 
         try{
-            System.out.println("Download has started...");
-
+            logger.info("Send file to client, package already received: " + packageAlreadyReceived);
             File fileToSend = new File(FILE_LARGE);
             double noOfPackets=Math.ceil(((fileToSend.length())/PACKET_SIZE));
-            System.out.println("No of packets to send:" + noOfPackets);
-
+            logger.info("No of packets to send:" + noOfPackets);
             BufferedInputStream bis = new BufferedInputStream(new FileInputStream(fileToSend));
-            
             long startTime = System.currentTimeMillis();
-
+            logger.info("startTime: " + startTime);
             for(double i=0;i<noOfPackets+1;i++) {
                 byte[] byteArray = new byte[PACKET_SIZE];
                 bis.read(byteArray, 0, byteArray.length);
@@ -80,7 +82,7 @@ public class Server extends Thread{
                 showDownloadStatus(i, noOfPackets);
                 // If packageAlreadyReceived is less then current package then don't send them
                 if(i < packageAlreadyReceived) {
-                    System.out.println("Package already received...");
+                    logger.info("Package already received: " + i);
                 }else{
                     os.write(byteArray, 0,byteArray.length);
                 }
@@ -103,14 +105,16 @@ public class Server extends Thread{
     }
 
     private void showDownloadStatus(double i, double noOfPackets) {
-        System.out.println("Download status: " + Math.ceil((100*(i/noOfPackets))) + "%" + "\r");
+        System.out.print(Math.ceil((100*(i/noOfPackets))) + "%");
+        System.out.flush();
+        logger.info("Download status: " + Math.ceil((100*(i/noOfPackets))) + "%");
     }
 
     private void timeOfOperation(long startTime, long endTime) {
         long timeElapsed = endTime - startTime;
         double seconds =  timeElapsed / 1000.0;
-        System.out.println("Time: "  + seconds + " seconds");
-        System.out.println("Download finished...");
+        logger.info("Time: "  + seconds + " seconds");
+        logger.info("Download finished...");
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -122,6 +126,19 @@ public class Server extends Thread{
         File fileToSend = new File(filePath);
         return fileToSend.length();
 
+    }
+
+    private void constructLogger() {
+        FileHandler fh;
+        try {
+            fh = new FileHandler("C:/Temp/log/server.log");
+            logger.setUseParentHandlers(false);
+            logger.addHandler(fh);
+            SimpleFormatter formatter = new SimpleFormatter();
+            fh.setFormatter(formatter);
+        }catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
 }
