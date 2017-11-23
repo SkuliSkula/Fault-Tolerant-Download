@@ -1,6 +1,7 @@
 package client;
 
-import message.MyMessage;
+import message.ClientMessage;
+import message.ServerMessage;
 
 import java.io.*;
 import java.net.Socket;
@@ -12,18 +13,16 @@ public class Client extends Thread {
 
     private int PORT = 6789;
     private String HOST = "localhost";
-    private final String FILE_TO_RECEIVE = "C:/Temp/testClient.txt";
+    private final String FILE_TO_RECEIVE = "C:/Temp/testClient.mkv";
     private final String FILE_RESUME = "C:/Temp/resume.txt";
 
-    private int command ;
+    private int command;
     private BufferedReader inFromUser;
-    private BufferedReader inFromServer;
     private Socket clientSocket;
-    private PrintWriter outToServer;
     private FileOutputStream fileOutputStream;
     private BufferedOutputStream bufferedOutputStream;
 
-    private final int BUFFER_SIZE = 12000;
+    private int bufferSize;
     private double packageToReceive;
     private byte[] resumeData;
     private ObjectOutputStream objectOutputStream;
@@ -34,6 +33,7 @@ public class Client extends Thread {
         try{
             inFromUser = new BufferedReader(new InputStreamReader(System.in));
             packageToReceive = 0;
+            bufferSize = 12000; // Default buffer size
             resumeData = null;
         }catch (Exception e) {
             e.printStackTrace();
@@ -57,30 +57,42 @@ public class Client extends Thread {
         try {
             clientSocket = new Socket(HOST,PORT);
             System.out.println("Connecting...");
-            inFromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+
+            // Check how many package we already received
             double savedNoPackage = readResumeFile();
             System.out.println("Number of package already received: " + savedNoPackage);
-            outToServer = new PrintWriter(clientSocket.getOutputStream(),true); // true = autoFlush
 
+            // Create the streams to send and receive Message objects
             objectOutputStream = new ObjectOutputStream(clientSocket.getOutputStream());
             objectInputStream = new ObjectInputStream(clientSocket.getInputStream());
 
             // Send to the server that you want to download and how many package you have received
-            objectOutputStream.writeObject(new MyMessage("Download", savedNoPackage));
+            objectOutputStream.writeObject(new ClientMessage("Download", savedNoPackage));
 
             // Get message back from the server
-            MyMessage m = (MyMessage) objectInputStream.readObject();
-            packageToReceive = m.getPackageReceived();
-
-            if(m.getOperation().equals("Resume"))
+            ServerMessage m = (ServerMessage) objectInputStream.readObject();
+            // Show what the server sent
+            System.out.println(m.toString());
+            //Calculate how many package the client will receive
+            double fileSize = m.getFileSize();
+            bufferSize = m.getPacketSize();
+            packageToReceive = Math.ceil(fileSize/bufferSize);
+            System.out.println("Package to receive: " + packageToReceive);
+            // Do some action bases on servers message
+            if(m.getMessage().equals("Resume"))
                 resumeFile();
-            else if(m.getOperation().equals("NewDownload"))
+            else if(m.getMessage().equals("NewDownload"))
                 receiveFile();
 
         }catch (IOException e) {
             e.printStackTrace();
         }catch (ClassNotFoundException e) {
             e.printStackTrace();
+        }finally {
+            System.out.println("Finally in requestDownload...");
+            objectOutputStream.flush();
+            objectOutputStream.close();
+            objectInputStream.close();
         }
     }
     // We resume the download, we read the bytes back into memory from where it crashed
@@ -92,7 +104,7 @@ public class Client extends Thread {
             //After the bytes have been stored we continue to receiving the file
             receiveFile();
         }catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("Failed to resume the download: " + e.getLocalizedMessage());
         }
 
     }
@@ -109,13 +121,13 @@ public class Client extends Thread {
 
             int count;
             int counter = 0;
-            byte[] buffer = new byte[BUFFER_SIZE];
+            byte[] buffer = new byte[bufferSize];
             while ((count = is.read(buffer)) > 0)
             {
                 bufferedOutputStream.write(buffer, 0, count);
-                System.out.println("Counter: " + counter++);
+                 counter++;
             }
-            if(counter <packageToReceive)
+            if(counter < packageToReceive)
                 writeResumeFile(counter);
         }catch (IOException e) {
             System.out.println("Receive file failed: " + e.getLocalizedMessage());
@@ -130,6 +142,7 @@ public class Client extends Thread {
     private void writeResumeFile(double packageNumber) {
         try{
             Files.write(Paths.get(FILE_RESUME), Double.toString(packageNumber).getBytes());
+            System.out.println(packageNumber +" package stored in the file...");
         }catch (IOException e){
             e.printStackTrace();
         }
@@ -146,7 +159,7 @@ public class Client extends Thread {
         }
         return Double.parseDouble(results);
     }
-
+    // The options displayed to the client
     private void menu() throws IOException {
         System.out.println();
         System.out.println("Welcome... Select an option to continue");

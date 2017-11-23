@@ -2,11 +2,11 @@ package message;
 
 import java.io.Serializable;
 
-public class MyMessage implements Serializable {
+public class ClientMessage implements Serializable {
     private String operation;
     private double packageReceived;
 
-    public MyMessage(String operation, double packageReceived){
+    public ClientMessage(String operation, double packageReceived){
         this.operation = operation;
         this.packageReceived = packageReceived;
     }
