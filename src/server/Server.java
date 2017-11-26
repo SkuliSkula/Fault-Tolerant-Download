@@ -2,6 +2,9 @@ package server;
 
 import message.ClientMessage;
 import message.ServerMessage;
+import org.json.simple.JSONObject;
+import utility.CustomProtocol;
+import utility.JsonConstants;
 
 import java.io.*;
 import java.net.ServerSocket;
@@ -18,8 +21,9 @@ public class Server extends Thread{
     private ServerSocket welcomeSocket;
     private Socket connectionSocket;
     private boolean resume = false;
-    private final int PACKET_SIZE = 12000;
+    private final int PACKET_SIZE = 15000;
     private Logger logger = Logger.getLogger("Server");
+    ObjectOutputStream objectOutputStream;
     public Server() {
         try {
             System.out.println("Starting server...");
@@ -40,11 +44,23 @@ public class Server extends Thread{
                 logger.info("Client connected: " + connectionSocket);
 
                 // Create the streams to send and receive Message objects from and to the client
-                ObjectOutputStream objectOutputStream = new ObjectOutputStream(connectionSocket.getOutputStream());
+                objectOutputStream = new ObjectOutputStream(connectionSocket.getOutputStream());
                 ObjectInputStream objectInputStream = new ObjectInputStream(connectionSocket.getInputStream());
 
+
+                JSONObject fromClient = (JSONObject) objectInputStream.readObject();
+
+                if(fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTFILE)) {
+                    sendFile(0);
+                }
+                else if (fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTBLOCK)) {
+                    sendFile(Double.parseDouble((String)fromClient.get(JsonConstants.KEYBLOCKNUMBER)));
+                }
+
+
+
                 // Get the message from the client
-                ClientMessage m = (ClientMessage) objectInputStream.readObject();
+                /*ClientMessage m = (ClientMessage) objectInputStream.readObject();
                 System.out.println(m.toString());
                 logger.info(m.toString());
                 // Check what the message contains and do operations based on that
@@ -54,7 +70,7 @@ public class Server extends Thread{
                     // Send a message to client, resume or new download request, the packet size being sent and the file size
                     objectOutputStream.writeObject(new ServerMessage(resume?"Resume":"NewDownload", PACKET_SIZE, getFileSize(FILE_LARGE)));
                     sendFile(m.getPackageReceived());
-                }
+                }*/
             }catch (IOException e) {
                 e.printStackTrace();
             }catch (ClassNotFoundException e) {
@@ -74,6 +90,11 @@ public class Server extends Thread{
             BufferedInputStream bis = new BufferedInputStream(new FileInputStream(fileToSend));
             long startTime = System.currentTimeMillis();
             logger.info("startTime: " + startTime);
+
+            CustomProtocol sendToClient = new CustomProtocol();
+            sendToClient.fileResponse(FILE_LARGE);
+            objectOutputStream.writeObject(sendToClient.getOverhead());
+
             for(double i=0;i<noOfPackets+1;i++) {
                 byte[] byteArray = new byte[PACKET_SIZE];
                 bis.read(byteArray, 0, byteArray.length);
@@ -81,17 +102,16 @@ public class Server extends Thread{
                 OutputStream os = connectionSocket.getOutputStream();
                 showDownloadStatus(i, noOfPackets);
                 // If packageAlreadyReceived is less then current package then don't send them
-                if(i < packageAlreadyReceived) {
+                if(i <= packageAlreadyReceived && packageAlreadyReceived != 0) {
+                    System.out.println("Package already received: " + i);
                     logger.info("Package already received: " + i);
                 }else{
                     os.write(byteArray, 0,byteArray.length);
                 }
 
                 // Fake connection interruption
-                /*if(i == (noOfPackets/2)){
+                /*if((int)i == (int)noOfPackets/2){
                     connectionSocket.close();
-                    os.flush();
-                    os.close();
                 }*/
                 os.flush();
             }
@@ -105,7 +125,7 @@ public class Server extends Thread{
     }
 
     private void showDownloadStatus(double i, double noOfPackets) {
-        System.out.print(Math.ceil((100*(i/noOfPackets))) + "%");
+        System.out.println(Math.ceil((100*(i/noOfPackets))) + "%");
         System.out.flush();
         logger.info("Download status: " + Math.ceil((100*(i/noOfPackets))) + "%");
     }
