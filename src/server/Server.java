@@ -54,23 +54,9 @@ public class Server extends Thread{
                     sendFile(0);
                 }
                 else if (fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTBLOCK)) {
-                    sendFile(Double.parseDouble((String)fromClient.get(JsonConstants.KEYBLOCKNUMBER)));
+                    sendFile((double)fromClient.get(JsonConstants.KEYBLOCKNUMBER));
                 }
 
-
-
-                // Get the message from the client
-                /*ClientMessage m = (ClientMessage) objectInputStream.readObject();
-                System.out.println(m.toString());
-                logger.info(m.toString());
-                // Check what the message contains and do operations based on that
-                if(m.getOperation().equals("Download")) {
-                    if(m.getPackageReceived()>0)
-                        resume = true;
-                    // Send a message to client, resume or new download request, the packet size being sent and the file size
-                    objectOutputStream.writeObject(new ServerMessage(resume?"Resume":"NewDownload", PACKET_SIZE, getFileSize(FILE_LARGE)));
-                    sendFile(m.getPackageReceived());
-                }*/
             }catch (IOException e) {
                 e.printStackTrace();
             }catch (ClassNotFoundException e) {

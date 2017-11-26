@@ -18,7 +18,7 @@ public class JsonConstants {
     public static final String KEYFILESIZE = "filesize";
     public static final String KEYPROTOCOL = "protocol";
     public static final String KEYCHECKSUM = "checksum";
-
+    public static final String KEYRESUME = "resume";
 
     // json request values
     public static final String VALUEREQUESTFILE = "filerequest";
@@ -29,5 +29,8 @@ public class JsonConstants {
     public static final int VALUEPROTOCOLFAULT = 1;
     public static final int VALUEPROTOCOLFAULTQUICK = 2;
 
+    // json file paths
+    public static final String RESUME_FILE = "C:\\Git\\Fault-Tolerant-Download\\json\\resume.json";
+    public static final String CONFIG_FILE = "C:\\Git\\Fault-Tolerant-Download\\json\\config.json";
 
 }
