@@ -6,6 +6,11 @@ import message.ServerMessage;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.logging.FileHandler;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
@@ -87,7 +92,7 @@ public class Server extends Thread{
                     os.write(byteArray, 0,byteArray.length);
                 }
 
-
+                // Fake connection interruption
                 /*if(i == (noOfPackets/2)){
                     connectionSocket.close();
                     os.flush();

@@ -8,12 +8,15 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 
 public class Client extends Thread {
 
     private int PORT = 6789;
     private String HOST = "localhost";
-    private final String FILE_TO_RECEIVE = "C:/Temp/testClient.mkv";
+    private final String FILE_TO_RECEIVE = "C:/Temp/Test/MrRobot.mkv";
     private final String FILE_RESUME = "C:/Temp/resume.txt";
 
     private int command;
