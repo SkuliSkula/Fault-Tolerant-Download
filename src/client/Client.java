@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import org.json.simple.JSONObject;
 
 public class Client {
 
@@ -44,6 +45,11 @@ public class Client {
         System.out.println("Write a line to the server: ");
         String sentence = inFromUser.readLine();
         System.out.println("Client> " + sentence);
+
+        // Create json object
+        JSONObject dataToSend = new JSONObject();
+
+
 
         // Send the line to the server
 
