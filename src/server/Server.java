@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import org.json.simple.JSONObject;
 
 public class Server {
 
@@ -17,8 +18,11 @@ public class Server {
      * @throws IOException
      */
 
+
+
     public static void main(String[] args) throws IOException {
 
+        final String keyData = "data";
         final int port = 6789;
         System.out.println("Starting server...");
 
@@ -46,6 +50,12 @@ public class Server {
 
             String clientSentence = inFromClient.readLine();
 
+            // Creating json object
+            JSONObject dataToSend = new JSONObject();
+            dataToSend.put(keyData, clientSentence);
+
+            System.out.println("Data as jsonObject");
+            System.out.println(dataToSend.toString());
             // Print out to the console what the client said
             System.out.println("Client> " + clientSentence);
             System.out.println("Client ip = "
