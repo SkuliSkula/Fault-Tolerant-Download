@@ -6,7 +6,9 @@ package utility;
 import org.json.simple.JSONObject;
 import utility.FileData;
 
-public class CustomProtocol {
+import java.io.Serializable;
+
+public class CustomProtocol implements Serializable {
 
     private JSONObject overhead;
 
@@ -28,7 +30,7 @@ public class CustomProtocol {
         overhead.put(JsonConstants.KEYBLOCKSIZE, blocksize);
     }
 
-    public void blockRequest(String filename, int blocksize, int blocknumber){
+    public void blockRequest(String filename, int blocksize, double blocknumber){
         overhead = new JSONObject();
         overhead.put(JsonConstants.KEYREQUEST,JsonConstants.VALUEREQUESTBLOCK);
         overhead.put(JsonConstants.KEYFILE,filename);
@@ -43,20 +45,20 @@ public class CustomProtocol {
 
     }
 
-    public void fileResponse(String filename, Byte[] data) {
+    public void fileResponse(String filename, byte[] data) {
         FileData fileData = new FileData(filename);
         overhead = fileData.getFileData();
         overhead.put(JsonConstants.KEYDATA, data);
 
     }
 
-    public void blockResponse(JSONObject blockRequest, Byte[] data){
+    public void blockResponse(JSONObject blockRequest, byte[] data){
         overhead = blockRequest;
         overhead.remove(JsonConstants.KEYREQUEST);
         overhead.put(JsonConstants.KEYDATA,data);
     }
 
-    public void simpleSend(Byte[] data, int blocknumber){
+    public void simpleSend(byte[] data, int blocknumber){
         overhead = new JSONObject();
         overhead.put(JsonConstants.KEYBLOCKNUMBER, blocknumber);
         overhead.put(JsonConstants.KEYDATA, data);

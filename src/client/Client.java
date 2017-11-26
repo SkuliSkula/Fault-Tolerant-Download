@@ -2,6 +2,9 @@ package client;
 
 import message.ClientMessage;
 import message.ServerMessage;
+import org.json.simple.JSONObject;
+import utility.CustomProtocol;
+import utility.JsonConstants;
 
 import java.io.*;
 import java.net.Socket;
@@ -13,7 +16,7 @@ public class Client extends Thread {
 
     private int PORT = 6789;
     private String HOST = "localhost";
-    private final String FILE_TO_RECEIVE = "C:/Temp/Test/MrRobot.mkv";
+    private final String FILE_TO_RECEIVE = "C:/Temp/Test/";
     private final String FILE_RESUME = "C:/Temp/resume.txt";
 
     private int command;
@@ -27,6 +30,8 @@ public class Client extends Thread {
     private byte[] resumeData;
     private ObjectOutputStream objectOutputStream;
     private ObjectInputStream objectInputStream;
+    private CustomProtocol customProtocol;
+    private String fileName;
 
     public Client() {
 
@@ -35,6 +40,7 @@ public class Client extends Thread {
             packageToReceive = 0;
             bufferSize = 12000; // Default buffer size
             resumeData = null;
+            customProtocol = new CustomProtocol();
         }catch (Exception e) {
             e.printStackTrace();
         }
@@ -66,23 +72,26 @@ public class Client extends Thread {
             objectOutputStream = new ObjectOutputStream(clientSocket.getOutputStream());
             objectInputStream = new ObjectInputStream(clientSocket.getInputStream());
 
-            // Send to the server that you want to download and how many package you have received
-            objectOutputStream.writeObject(new ClientMessage("Download", savedNoPackage));
+            if(savedNoPackage == 0.0) {
+                customProtocol.fileRequest("C:/Temp/MrRobot.mkv");
+                objectOutputStream.writeObject(customProtocol.getOverhead());
+                // Get message back from the server
+                JSONObject fromServer = (JSONObject) objectInputStream.readObject();
 
-            // Get message back from the server
-            ServerMessage m = (ServerMessage) objectInputStream.readObject();
-            // Show what the server sent
-            System.out.println(m.toString());
-            //Calculate how many package the client will receive
-            double fileSize = m.getFileSize();
-            bufferSize = m.getPacketSize();
-            packageToReceive = Math.ceil(fileSize/bufferSize);
-            System.out.println("Package to receive: " + packageToReceive);
-            // Do some action bases on servers message
-            if(m.getMessage().equals("Resume"))
+                //Calculate how many package the client will receive
+                fileName = (String) fromServer.get(JsonConstants.KEYFILE);
+                double fileSize = Double.parseDouble((String) fromServer.get(JsonConstants.KEYFILESIZE));
+                bufferSize = Integer.parseInt((String) fromServer.get(JsonConstants.KEYBLOCKSIZE));
+                packageToReceive = Math.ceil(fileSize / bufferSize);
+                System.out.println("Package to receive: " + packageToReceive);
+
+                receiveFile(fileName);
+            }
+            else{
+                customProtocol.blockRequest("C:/Temp/MrRobot.mkv",0, savedNoPackage);
+                objectOutputStream.writeObject(customProtocol.getOverhead());
                 resumeFile();
-            else if(m.getMessage().equals("NewDownload"))
-                receiveFile();
+            }
 
         }catch (IOException e) {
             e.printStackTrace();
@@ -102,18 +111,18 @@ public class Client extends Thread {
         try{
             resumeData = Files.readAllBytes(fileLocation);
             //After the bytes have been stored we continue to receiving the file
-            receiveFile();
+            receiveFile("");
         }catch (IOException e) {
             System.out.println("Failed to resume the download: " + e.getLocalizedMessage());
         }
 
     }
 
-    private void receiveFile() throws IOException {
+    private void receiveFile(String fileName) throws IOException {
             System.out.println("receiveFile...");
         try{
             InputStream is = clientSocket.getInputStream();
-            fileOutputStream = new FileOutputStream(FILE_TO_RECEIVE);
+            fileOutputStream = new FileOutputStream(FILE_TO_RECEIVE+fileName);
             bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
             // Write the resume data first to the file
             if(resumeData != null)
