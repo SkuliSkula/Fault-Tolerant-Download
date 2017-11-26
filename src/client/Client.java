@@ -1,7 +1,5 @@
 package client;
 
-import message.ClientMessage;
-import message.ServerMessage;
 import org.json.simple.JSONObject;
 import utility.CustomProtocol;
 import utility.JsonConstants;
@@ -25,7 +23,7 @@ public class Client extends Thread {
     private FileOutputStream fileOutputStream;
     private BufferedOutputStream bufferedOutputStream;
 
-    private int bufferSize;
+    private long bufferSize;
     private double packageToReceive;
     private byte[] resumeData;
     private ObjectOutputStream objectOutputStream;
@@ -65,7 +63,7 @@ public class Client extends Thread {
             System.out.println("Connecting...");
 
             // Check how many package we already received
-            double savedNoPackage = readResumeFile();
+            double savedNoPackage = getStoredAmountOfPackage();
             System.out.println("Number of package already received: " + savedNoPackage);
 
             // Create the streams to send and receive Message objects
@@ -77,11 +75,11 @@ public class Client extends Thread {
                 objectOutputStream.writeObject(customProtocol.getOverhead());
                 // Get message back from the server
                 JSONObject fromServer = (JSONObject) objectInputStream.readObject();
-
+                customProtocol.writeJsonToFile(JsonConstants.CONFIG_FILE, fromServer);
                 //Calculate how many package the client will receive
                 fileName = (String) fromServer.get(JsonConstants.KEYFILE);
-                double fileSize = Double.parseDouble((String) fromServer.get(JsonConstants.KEYFILESIZE));
-                bufferSize = Integer.parseInt((String) fromServer.get(JsonConstants.KEYBLOCKSIZE));
+                long fileSize = (long) fromServer.get(JsonConstants.KEYFILESIZE);
+                bufferSize = (long) fromServer.get(JsonConstants.KEYBLOCKSIZE);
                 packageToReceive = Math.ceil(fileSize / bufferSize);
                 System.out.println("Package to receive: " + packageToReceive);
 
@@ -106,12 +104,14 @@ public class Client extends Thread {
     }
     // We resume the download, we read the bytes back into memory from where it crashed
     private void resumeFile(){
+        JSONObject jsonObject = customProtocol.readJsonFromFile(JsonConstants.CONFIG_FILE);
+        String filePath = (String) jsonObject.get(JsonConstants.KEYFILE);
         System.out.println("Resume download");
-        Path fileLocation = Paths.get(FILE_TO_RECEIVE);
+        Path fileLocation = Paths.get(filePath);
         try{
             resumeData = Files.readAllBytes(fileLocation);
             //After the bytes have been stored we continue to receiving the file
-            receiveFile("");
+            receiveFile(filePath);
         }catch (IOException e) {
             System.out.println("Failed to resume the download: " + e.getLocalizedMessage());
         }
@@ -122,7 +122,7 @@ public class Client extends Thread {
             System.out.println("receiveFile...");
         try{
             InputStream is = clientSocket.getInputStream();
-            fileOutputStream = new FileOutputStream(FILE_TO_RECEIVE+fileName);
+            fileOutputStream = new FileOutputStream(fileName.equals("")? fileName:FILE_TO_RECEIVE+fileName);
             bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
             // Write the resume data first to the file
             if(resumeData != null)
@@ -130,7 +130,7 @@ public class Client extends Thread {
 
             int count;
             int counter = 0;
-            byte[] buffer = new byte[bufferSize];
+            byte[] buffer = new byte[(int)bufferSize];
             while ((count = is.read(buffer)) > 0)
             {
                 bufferedOutputStream.write(buffer, 0, count);
@@ -150,15 +150,17 @@ public class Client extends Thread {
     // Store the package number
     private void writeResumeFile(double packageNumber) {
         try{
-            Files.write(Paths.get(FILE_RESUME), Double.toString(packageNumber).getBytes());
-            System.out.println(packageNumber +" package stored in the file...");
+            JSONObject jsonObject = new JSONObject();
+            jsonObject.put(JsonConstants.KEYRESUME, packageNumber);
+            customProtocol.writeJsonToFile(JsonConstants.RESUME_FILE, jsonObject);
         }catch (IOException e){
             e.printStackTrace();
         }
     }
     // Return the stored package number
-    private double readResumeFile() {
-        String results = "";
+    private double getStoredAmountOfPackage() {
+        JSONObject jsonObject = customProtocol.readJsonFromFile(JsonConstants.RESUME_FILE);
+        String results = (String) jsonObject.get(JsonConstants.KEYRESUME);
         byte[] arr;
         try{
             arr = Files.readAllBytes(Paths.get(FILE_RESUME));
