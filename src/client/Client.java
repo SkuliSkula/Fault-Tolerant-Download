@@ -23,7 +23,7 @@ public class Client extends Thread {
     private FileOutputStream fileOutputStream;
     private BufferedOutputStream bufferedOutputStream;
 
-    private long bufferSize;
+    private int bufferSize;
     private double packageToReceive;
     private byte[] resumeData;
     private ObjectOutputStream objectOutputStream;
@@ -37,7 +37,7 @@ public class Client extends Thread {
         try{
             inFromUser = new BufferedReader(new InputStreamReader(System.in));
             packageToReceive = 0;
-            bufferSize = 12000; // Default buffer size
+            bufferSize = 25000; // Default buffer size
             resumeData = null;
             customProtocol = new CustomProtocol();
         }catch (Exception e) {
@@ -80,7 +80,8 @@ public class Client extends Thread {
                 //Calculate how many package the client will receive
                 fileName = (String) fromServer.get(JsonConstants.KEYFILE);
                 long fileSize = (long) fromServer.get(JsonConstants.KEYFILESIZE);
-                bufferSize = (long) fromServer.get(JsonConstants.KEYBLOCKSIZE);
+                long bufferSizeLong = (long) fromServer.get(JsonConstants.KEYBLOCKSIZE);
+                //bufferSize = toIntExact(bufferSizeLong);
                 packageToReceive = Math.ceil(fileSize / bufferSize);
                 System.out.println("Package to receive: " + packageToReceive);
 
@@ -96,12 +97,12 @@ public class Client extends Thread {
             e.printStackTrace();
         }catch (ClassNotFoundException e) {
             e.printStackTrace();
-        }finally {
+        }/*finally {
             System.out.println("Finally in requestDownload...");
             objectOutputStream.flush();
             objectOutputStream.close();
             objectInputStream.close();
-        }
+        }*/
     }
     // We resume the download, we read the bytes back into memory from where it crashed
     private void resumeFile(){
@@ -130,19 +131,16 @@ public class Client extends Thread {
 
             for(;;){
                 dataFromServer = (JSONObject) objectInputStream.readObject();
-                if(dataFromServer != null)
-                    bufferedOutputStream.write((byte[]) dataFromServer.get(JsonConstants.KEYDATA));
-                else
-                    System.out.print("Data from server is null...");
+                bufferedOutputStream.write((byte[]) dataFromServer.get(JsonConstants.KEYDATA),0,bufferSize);
             }
 
         }catch (SocketTimeoutException e) {
             // Timeout store the received data
-            System.out.print("Timeout...");
+            System.out.println("Timeout...");
             writeResumeFile((int)dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
         }catch (EOFException e) {
             // End of the stream
-            System.out.print("End of stream...");
+            System.out.println("End of stream...");
             writeResumeFile((double)dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
         }
         catch (IOException e) {
@@ -150,11 +148,11 @@ public class Client extends Thread {
         }catch (ClassNotFoundException e) {
             e.printStackTrace();
         }
-        finally {
+        /*finally {
             if (fileOutputStream != null) fileOutputStream.close();
             if (bufferedOutputStream != null) bufferedOutputStream.close();
             if (clientSocket != null) clientSocket.close();
-        }
+        }*/
     }
     // Store the package number
     private void writeResumeFile(double packageNumber) {

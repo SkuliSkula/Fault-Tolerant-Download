@@ -1,7 +1,5 @@
 package server;
 
-import message.ClientMessage;
-import message.ServerMessage;
 import org.json.simple.JSONObject;
 import utility.CustomProtocol;
 import utility.JsonConstants;
@@ -18,10 +16,11 @@ public class Server extends Thread{
     private ServerSocket welcomeSocket;
     private Socket connectionSocket;
     private boolean interrupt;
-    private final int PACKET_SIZE = 15000;
+    private final int PACKET_SIZE = 25000;
     private Logger logger = Logger.getLogger("Server");
     private ObjectOutputStream objectOutputStream;
     private String filePath;
+    private boolean resume = false;
     public Server(boolean interrupt, String filePath) {
         this.interrupt = interrupt;
         this.filePath = filePath;
@@ -51,9 +50,11 @@ public class Server extends Thread{
                 JSONObject fromClient = (JSONObject) objectInputStream.readObject();
 
                 if(fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTFILE)) { // New download
+                    resume = false;
                     sendFile(0);
                 }
                 else if (fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTBLOCK)) { // Resume download
+                    resume = true;
                     sendFile((double)fromClient.get(JsonConstants.KEYBLOCKNUMBER));
                 }
 
@@ -64,10 +65,6 @@ public class Server extends Thread{
             }
 
         }
-    }
-
-    private void resumeFile(double packageAlreadyReceived) {
-
     }
 
     private void sendFile(double packageAlreadyReceived) throws IOException {
@@ -82,8 +79,10 @@ public class Server extends Thread{
             logger.info("startTime: " + startTime);
 
             CustomProtocol sendToClient = new CustomProtocol();
-            sendToClient.fileResponse(filePath);
-            objectOutputStream.writeObject(sendToClient.getOverhead());
+            if(!resume){
+                sendToClient.fileResponse(filePath);
+                objectOutputStream.writeObject(sendToClient.getOverhead());
+            }
 
             for(double i=0;i<noOfPackets+1;i++) {
                 byte[] byteArray = new byte[PACKET_SIZE];
@@ -127,14 +126,6 @@ public class Server extends Thread{
         logger.info("Download finished...");
     }
 
-    public static void main(String[] args) throws IOException, InterruptedException {
-        String FILEPATH_BIBLE = "C:/Temp/Bible.txt";
-        String FILE_LARGE = "C:/Temp/MrRobot.mkv";
-        String FILE_TEST = "C/:Temp/Test.txt";
-        Server s = new Server(false, FILE_LARGE);
-        s.start();
-    }
-
     private void constructLogger() {
         FileHandler fh;
         try {
@@ -147,6 +138,17 @@ public class Server extends Thread{
             e.printStackTrace();
         }
     }
+
+    public static void main(String[] args) throws IOException, InterruptedException {
+        String FILEPATH_BIBLE = "C:/Temp/Bible.txt";
+        String FILE_LARGE = "C:/Temp/MrRobot.mkv";
+        String FILE_500 = "C:/Temp/test.mp4";
+        String FILE_TEST = "C/:Temp/Test.txt";
+        Server s = new Server(false, FILE_500);
+        s.start();
+    }
+
+
 
 }
 
