@@ -1,7 +1,5 @@
 package server;
 
-import message.ClientMessage;
-import message.ServerMessage;
 import org.json.simple.JSONObject;
 import utility.CustomProtocol;
 import utility.JsonConstants;
@@ -15,16 +13,17 @@ import java.util.logging.SimpleFormatter;
 
 public class Server extends Thread{
     private int PORT = 6789;
-    private final String FILEPATH_BIBLE = "C:/Temp/Bible.txt";
-    private final String FILE_LARGE = "C:/Temp/MrRobot.mkv";
-    private final String FILE_TEST = "C/:Temp/Test.txt";
     private ServerSocket welcomeSocket;
     private Socket connectionSocket;
-    private boolean resume = false;
-    private final int PACKET_SIZE = 15000;
+    private boolean interrupt;
+    private final int PACKET_SIZE = 25000;
     private Logger logger = Logger.getLogger("Server");
-    ObjectOutputStream objectOutputStream;
-    public Server() {
+    private ObjectOutputStream objectOutputStream;
+    private String filePath;
+    private boolean resume = false;
+    public Server(boolean interrupt, String filePath) {
+        this.interrupt = interrupt;
+        this.filePath = filePath;
         try {
             System.out.println("Starting server...");
             welcomeSocket = new ServerSocket(PORT);
@@ -50,10 +49,12 @@ public class Server extends Thread{
 
                 JSONObject fromClient = (JSONObject) objectInputStream.readObject();
 
-                if(fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTFILE)) {
+                if(fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTFILE)) { // New download
+                    resume = false;
                     sendFile(0);
                 }
-                else if (fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTBLOCK)) {
+                else if (fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTBLOCK)) { // Resume download
+                    resume = true;
                     sendFile((double)fromClient.get(JsonConstants.KEYBLOCKNUMBER));
                 }
 
@@ -70,7 +71,7 @@ public class Server extends Thread{
 
         try{
             logger.info("Send file to client, package already received: " + packageAlreadyReceived);
-            File fileToSend = new File(FILE_LARGE);
+            File fileToSend = new File(filePath);
             double noOfPackets=Math.ceil(((fileToSend.length())/PACKET_SIZE));
             logger.info("No of packets to send:" + noOfPackets);
             BufferedInputStream bis = new BufferedInputStream(new FileInputStream(fileToSend));
@@ -78,28 +79,32 @@ public class Server extends Thread{
             logger.info("startTime: " + startTime);
 
             CustomProtocol sendToClient = new CustomProtocol();
-            sendToClient.fileResponse(FILE_LARGE);
-            objectOutputStream.writeObject(sendToClient.getOverhead());
+            if(!resume){
+                sendToClient.fileResponse(filePath);
+                objectOutputStream.writeObject(sendToClient.getOverhead());
+            }
 
             for(double i=0;i<noOfPackets+1;i++) {
                 byte[] byteArray = new byte[PACKET_SIZE];
                 bis.read(byteArray, 0, byteArray.length);
-                //System.out.println("Packet:"+(i+1));
-                OutputStream os = connectionSocket.getOutputStream();
+                sendToClient.simpleSend(byteArray,i);
                 showDownloadStatus(i, noOfPackets);
                 // If packageAlreadyReceived is less then current package then don't send them
                 if(i <= packageAlreadyReceived && packageAlreadyReceived != 0) {
-                    System.out.println("Package already received: " + i);
                     logger.info("Package already received: " + i);
                 }else{
-                    os.write(byteArray, 0,byteArray.length);
+                    objectOutputStream.writeObject(sendToClient.getOverhead());
+                    logger.info("Send me package: " + i);
                 }
 
-                // Fake connection interruption
-                /*if((int)i == (int)noOfPackets/2){
-                    connectionSocket.close();
-                }*/
-                os.flush();
+                // Fake connection interruption (selected in the constructor)
+                if(interrupt) {
+                    if((int)i == (int)noOfPackets/2){
+                        connectionSocket.close();
+                    }
+                }
+
+                objectOutputStream.flush();
             }
             long endTime = System.currentTimeMillis();
             timeOfOperation(startTime,endTime);
@@ -112,8 +117,6 @@ public class Server extends Thread{
 
     private void showDownloadStatus(double i, double noOfPackets) {
         System.out.println(Math.ceil((100*(i/noOfPackets))) + "%");
-        System.out.flush();
-        logger.info("Download status: " + Math.ceil((100*(i/noOfPackets))) + "%");
     }
 
     private void timeOfOperation(long startTime, long endTime) {
@@ -121,17 +124,6 @@ public class Server extends Thread{
         double seconds =  timeElapsed / 1000.0;
         logger.info("Time: "  + seconds + " seconds");
         logger.info("Download finished...");
-    }
-
-    public static void main(String[] args) throws IOException, InterruptedException {
-        Server s = new Server();
-        s.start();
-    }
-
-    private long getFileSize(String filePath){
-        File fileToSend = new File(filePath);
-        return fileToSend.length();
-
     }
 
     private void constructLogger() {
@@ -146,6 +138,17 @@ public class Server extends Thread{
             e.printStackTrace();
         }
     }
+
+    public static void main(String[] args) throws IOException, InterruptedException {
+        String FILEPATH_BIBLE = "C:/Temp/Bible.txt";
+        String FILE_LARGE = "C:/Temp/MrRobot.mkv";
+        String FILE_500 = "C:/Temp/test.mp4";
+        String FILE_TEST = "C/:Temp/Test.txt";
+        Server s = new Server(false, FILE_500);
+        s.start();
+    }
+
+
 
 }
 

@@ -6,6 +6,7 @@ import utility.JsonConstants;
 
 import java.io.*;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -15,7 +16,6 @@ public class Client extends Thread {
     private int PORT = 6789;
     private String HOST = "localhost";
     private final String FILE_TO_RECEIVE = "C:/Temp/Test/";
-    private final String FILE_RESUME = "C:/Temp/resume.txt";
 
     private int command;
     private BufferedReader inFromUser;
@@ -23,7 +23,7 @@ public class Client extends Thread {
     private FileOutputStream fileOutputStream;
     private BufferedOutputStream bufferedOutputStream;
 
-    private long bufferSize;
+    private int bufferSize;
     private double packageToReceive;
     private byte[] resumeData;
     private ObjectOutputStream objectOutputStream;
@@ -31,12 +31,13 @@ public class Client extends Thread {
     private CustomProtocol customProtocol;
     private String fileName;
 
+    private JSONObject dataFromServer;
     public Client() {
 
         try{
             inFromUser = new BufferedReader(new InputStreamReader(System.in));
             packageToReceive = 0;
-            bufferSize = 12000; // Default buffer size
+            bufferSize = 25000; // Default buffer size
             resumeData = null;
             customProtocol = new CustomProtocol();
         }catch (Exception e) {
@@ -79,7 +80,8 @@ public class Client extends Thread {
                 //Calculate how many package the client will receive
                 fileName = (String) fromServer.get(JsonConstants.KEYFILE);
                 long fileSize = (long) fromServer.get(JsonConstants.KEYFILESIZE);
-                bufferSize = (long) fromServer.get(JsonConstants.KEYBLOCKSIZE);
+                long bufferSizeLong = (long) fromServer.get(JsonConstants.KEYBLOCKSIZE);
+                //bufferSize = toIntExact(bufferSizeLong);
                 packageToReceive = Math.ceil(fileSize / bufferSize);
                 System.out.println("Package to receive: " + packageToReceive);
 
@@ -95,19 +97,19 @@ public class Client extends Thread {
             e.printStackTrace();
         }catch (ClassNotFoundException e) {
             e.printStackTrace();
-        }finally {
+        }/*finally {
             System.out.println("Finally in requestDownload...");
             objectOutputStream.flush();
             objectOutputStream.close();
             objectInputStream.close();
-        }
+        }*/
     }
     // We resume the download, we read the bytes back into memory from where it crashed
     private void resumeFile(){
         JSONObject jsonObject = customProtocol.readJsonFromFile(JsonConstants.CONFIG_FILE);
         String filePath = (String) jsonObject.get(JsonConstants.KEYFILE);
         System.out.println("Resume download");
-        Path fileLocation = Paths.get(filePath);
+        Path fileLocation = Paths.get(FILE_TO_RECEIVE + filePath);
         try{
             resumeData = Files.readAllBytes(fileLocation);
             //After the bytes have been stored we continue to receiving the file
@@ -121,31 +123,36 @@ public class Client extends Thread {
     private void receiveFile(String fileName) throws IOException {
             System.out.println("receiveFile...");
         try{
-            InputStream is = clientSocket.getInputStream();
-            fileOutputStream = new FileOutputStream(fileName.equals("")? fileName:FILE_TO_RECEIVE+fileName);
+            fileOutputStream = new FileOutputStream(FILE_TO_RECEIVE+fileName);
             bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
             // Write the resume data first to the file
             if(resumeData != null)
                 bufferedOutputStream.write(resumeData);
 
-            int count;
-            int counter = 0;
-            byte[] buffer = new byte[(int)bufferSize];
-            while ((count = is.read(buffer)) > 0)
-            {
-                bufferedOutputStream.write(buffer, 0, count);
-                 counter++;
+            for(;;){
+                dataFromServer = (JSONObject) objectInputStream.readObject();
+                bufferedOutputStream.write((byte[]) dataFromServer.get(JsonConstants.KEYDATA),0,bufferSize);
             }
-            if(counter < packageToReceive)
-                writeResumeFile(counter);
-        }catch (IOException e) {
-            System.out.println("Receive file failed: " + e.getLocalizedMessage());
+
+        }catch (SocketTimeoutException e) {
+            // Timeout store the received data
+            System.out.println("Timeout...");
+            writeResumeFile((int)dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
+        }catch (EOFException e) {
+            // End of the stream
+            System.out.println("End of stream...");
+            writeResumeFile((double)dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
         }
-        finally {
+        catch (IOException e) {
+            e.printStackTrace();
+        }catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        /*finally {
             if (fileOutputStream != null) fileOutputStream.close();
             if (bufferedOutputStream != null) bufferedOutputStream.close();
             if (clientSocket != null) clientSocket.close();
-        }
+        }*/
     }
     // Store the package number
     private void writeResumeFile(double packageNumber) {
@@ -160,15 +167,7 @@ public class Client extends Thread {
     // Return the stored package number
     private double getStoredAmountOfPackage() {
         JSONObject jsonObject = customProtocol.readJsonFromFile(JsonConstants.RESUME_FILE);
-        String results = (String) jsonObject.get(JsonConstants.KEYRESUME);
-        byte[] arr;
-        try{
-            arr = Files.readAllBytes(Paths.get(FILE_RESUME));
-            results = new String(arr);
-        }catch (IOException e) {
-            e.printStackTrace();
-        }
-        return Double.parseDouble(results);
+        return (double) jsonObject.get(JsonConstants.KEYRESUME);
     }
     // The options displayed to the client
     private void menu() throws IOException {
