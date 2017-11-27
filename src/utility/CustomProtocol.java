@@ -60,9 +60,9 @@ public class CustomProtocol implements Serializable {
         overhead.put(JsonConstants.KEYDATA,data);
     }
 
-    public void simpleSend(byte[] data, int blocknumber){
+    public void simpleSend(byte[] data, double blockNumber){
         overhead = new JSONObject();
-        overhead.put(JsonConstants.KEYBLOCKNUMBER, blocknumber);
+        overhead.put(JsonConstants.KEYBLOCKNUMBER, blockNumber);
         overhead.put(JsonConstants.KEYDATA, data);
     }
 
