@@ -144,7 +144,7 @@ public class Server extends Thread{
         String FILE_LARGE = "C:/Temp/MrRobot.mkv";
         String FILE_500 = "C:/Temp/test.mp4";
         String FILE_TEST = "C/:Temp/Test.txt";
-        Server s = new Server(false, FILE_500);
+        Server s = new Server(false, FILE_LARGE);
         s.start();
     }
 
