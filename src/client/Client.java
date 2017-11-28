@@ -30,6 +30,7 @@ public class Client extends Thread {
     private ObjectInputStream objectInputStream;
     private CustomProtocol customProtocol;
     private String fileName;
+    private boolean resume;
 
     private JSONObject dataFromServer;
     public Client() {
@@ -39,6 +40,7 @@ public class Client extends Thread {
             packageToReceive = 0;
             bufferSize = 25000; // Default buffer size
             resumeData = null;
+            resume = false;
             customProtocol = new CustomProtocol();
         }catch (Exception e) {
             e.printStackTrace();
@@ -72,6 +74,7 @@ public class Client extends Thread {
             objectInputStream = new ObjectInputStream(clientSocket.getInputStream());
 
             if(savedNoPackage == 0.0) {
+                resume = false;
                 customProtocol.fileRequest("C:/Temp/MrRobot.mkv");
                 objectOutputStream.writeObject(customProtocol.getOverhead());
                 // Get message back from the server
@@ -90,6 +93,7 @@ public class Client extends Thread {
             else{
                 customProtocol.blockRequest("C:/Temp/MrRobot.mkv",0, savedNoPackage);
                 objectOutputStream.writeObject(customProtocol.getOverhead());
+                resume = true;
                 resumeFile();
             }
 
@@ -97,12 +101,12 @@ public class Client extends Thread {
             e.printStackTrace();
         }catch (ClassNotFoundException e) {
             e.printStackTrace();
-        }/*finally {
+        }finally {
             System.out.println("Finally in requestDownload...");
             objectOutputStream.flush();
             objectOutputStream.close();
             objectInputStream.close();
-        }*/
+        }
     }
     // We resume the download, we read the bytes back into memory from where it crashed
     private void resumeFile(){
@@ -123,11 +127,8 @@ public class Client extends Thread {
     private void receiveFile(String fileName) throws IOException {
             System.out.println("receiveFile...");
         try{
-            fileOutputStream = new FileOutputStream(FILE_TO_RECEIVE+fileName);
+            fileOutputStream = new FileOutputStream(FILE_TO_RECEIVE+fileName, resume);
             bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
-            // Write the resume data first to the file
-            if(resumeData != null)
-                bufferedOutputStream.write(resumeData);
 
             for(;;){
                 dataFromServer = (JSONObject) objectInputStream.readObject();
@@ -148,11 +149,11 @@ public class Client extends Thread {
         }catch (ClassNotFoundException e) {
             e.printStackTrace();
         }
-        /*finally {
+        finally {
             if (fileOutputStream != null) fileOutputStream.close();
             if (bufferedOutputStream != null) bufferedOutputStream.close();
             if (clientSocket != null) clientSocket.close();
-        }*/
+        }
     }
     // Store the package number
     private void writeResumeFile(double packageNumber) {
