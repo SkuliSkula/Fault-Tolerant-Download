@@ -7,15 +7,12 @@ import utility.JsonConstants;
 import java.io.*;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 
 public class Client extends Thread {
 
     private int PORT = 6789;
     private String HOST = "localhost";
-    private final String FILE_TO_RECEIVE = "C:/Temp/Test/";
+    private final String fileStorageLocation = "C:/Temp/Test/";
 
     private int command;
     private BufferedReader inFromUser;
@@ -25,26 +22,35 @@ public class Client extends Thread {
 
     private int bufferSize;
     private double packageToReceive;
-    private byte[] resumeData;
     private ObjectOutputStream objectOutputStream;
     private ObjectInputStream objectInputStream;
     private CustomProtocol customProtocol;
     private String fileName;
-    private boolean resume;
+    private boolean appendToFile;
+    private String resume;
+    private JSONObject configFile;
+    private String requestFileName;
 
     private JSONObject dataFromServer;
-    public Client() {
-
+    public Client(String requestFileName) {
+        this.requestFileName = requestFileName;
         try{
+
             inFromUser = new BufferedReader(new InputStreamReader(System.in));
             packageToReceive = 0;
             bufferSize = 25000; // Default buffer size
-            resumeData = null;
-            resume = false;
+            appendToFile = false;
             customProtocol = new CustomProtocol();
+            readConfigFile();
         }catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private void readConfigFile() {
+        configFile = customProtocol.readJsonFromFile(JsonConstants.CONFIG_FILE);
+        fileName = (String) configFile.get(JsonConstants.KEYFILE);
+        resume = (String) configFile.get(JsonConstants.KEY_IS_RESUME);
     }
 
     public void run() {
@@ -65,21 +71,17 @@ public class Client extends Thread {
             clientSocket = new Socket(HOST,PORT);
             System.out.println("Connecting...");
 
-            // Check how many package we already received
-            double savedNoPackage = getStoredAmountOfPackage();
-            System.out.println("Number of package already received: " + savedNoPackage);
-
             // Create the streams to send and receive Message objects
             objectOutputStream = new ObjectOutputStream(clientSocket.getOutputStream());
             objectInputStream = new ObjectInputStream(clientSocket.getInputStream());
 
-            if(savedNoPackage == 0.0) {
-                resume = false;
-                customProtocol.fileRequest("C:/Temp/MrRobot.mkv");
+            if(resume.equals("false")) { // new file
+                appendToFile = false;
+                customProtocol.fileRequest(requestFileName);
                 objectOutputStream.writeObject(customProtocol.getOverhead());
                 // Get message back from the server
                 JSONObject fromServer = (JSONObject) objectInputStream.readObject();
-                customProtocol.writeJsonToFile(JsonConstants.CONFIG_FILE, fromServer);
+
                 //Calculate how many package the client will receive
                 fileName = (String) fromServer.get(JsonConstants.KEYFILE);
                 long fileSize = (long) fromServer.get(JsonConstants.KEYFILESIZE);
@@ -87,14 +89,22 @@ public class Client extends Thread {
                 //bufferSize = toIntExact(bufferSizeLong);
                 packageToReceive = Math.ceil(fileSize / bufferSize);
                 System.out.println("Package to receive: " + packageToReceive);
+                // Write to the config file
+                writeConfigFile(resume, requestFileName, bufferSizeLong,fileSize);
 
                 receiveFile(fileName);
             }
-            else{
-                customProtocol.blockRequest("C:/Temp/MrRobot.mkv",0, savedNoPackage);
+            else{ // Resume download
+                // Check how many package we already received
+                double savedNoPackage = getStoredAmountOfPackage();
+                // Get the fileName from the config file
+                fileName = (String) configFile.get(JsonConstants.KEYFILE);
+                // Create a message to the server
+                customProtocol.blockRequest(fileName,0, savedNoPackage);
+                // Send a request to the server
                 objectOutputStream.writeObject(customProtocol.getOverhead());
-                resume = true;
-                resumeFile();
+                appendToFile = true;
+                receiveFile(fileName);
             }
 
         }catch (IOException e) {
@@ -102,24 +112,25 @@ public class Client extends Thread {
         }catch (ClassNotFoundException e) {
             e.printStackTrace();
         }finally {
-            System.out.println("Finally in requestDownload...");
-            objectOutputStream.flush();
-            objectOutputStream.close();
-            objectInputStream.close();
+            if(objectInputStream != null)
+                objectInputStream.close();
+            if(objectOutputStream != null) {
+                objectOutputStream.flush();
+                objectOutputStream.close();
+            }
         }
     }
-    // We resume the download, we read the bytes back into memory from where it crashed
-    private void resumeFile(){
-        JSONObject jsonObject = customProtocol.readJsonFromFile(JsonConstants.CONFIG_FILE);
-        String filePath = (String) jsonObject.get(JsonConstants.KEYFILE);
-        System.out.println("Resume download");
-        Path fileLocation = Paths.get(FILE_TO_RECEIVE + filePath);
+
+    private void writeConfigFile(String resume, String fileName, long bufferSizeLong, long fileSize) {
+        JSONObject config = new JSONObject();
+        config.put(JsonConstants.KEY_IS_RESUME, resume);
+        config.put(JsonConstants.KEYFILE, fileName);
+        config.put(JsonConstants.KEYNUMBEROFBLOCKS, bufferSizeLong);
+        config.put(JsonConstants.KEYFILESIZE, fileSize);
         try{
-            resumeData = Files.readAllBytes(fileLocation);
-            //After the bytes have been stored we continue to receiving the file
-            receiveFile(filePath);
-        }catch (IOException e) {
-            System.out.println("Failed to resume the download: " + e.getLocalizedMessage());
+            customProtocol.writeJsonToFile(JsonConstants.CONFIG_FILE, config);
+        }catch (IOException e){
+            System.out.println("Could not write the config file: " + e.getMessage());
         }
 
     }
@@ -127,7 +138,7 @@ public class Client extends Thread {
     private void receiveFile(String fileName) throws IOException {
             System.out.println("receiveFile...");
         try{
-            fileOutputStream = new FileOutputStream(FILE_TO_RECEIVE+fileName, resume);
+            fileOutputStream = new FileOutputStream(fileStorageLocation +fileName, appendToFile);
             bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
 
             for(;;){
@@ -142,7 +153,16 @@ public class Client extends Thread {
         }catch (EOFException e) {
             // End of the stream
             System.out.println("End of stream...");
-            writeResumeFile((double)dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
+            if(dataFromServer.get(JsonConstants.KEYBLOCKNUMBER) == configFile.get(JsonConstants.KEYNUMBEROFBLOCKS)){
+                // client received the whole file
+                System.out.println("Whole file received");
+                writeResumeFile(0.0);
+                writeConfigFile("false",fileName,bufferSize, (long) configFile.get(JsonConstants.KEYFILESIZE));
+            }else {
+                writeResumeFile((double)dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
+                writeConfigFile("true",fileName,bufferSize,(long) configFile.get(JsonConstants.KEYFILESIZE));
+            }
+
         }
         catch (IOException e) {
             e.printStackTrace();
@@ -165,6 +185,7 @@ public class Client extends Thread {
             e.printStackTrace();
         }
     }
+
     // Return the stored package number
     private double getStoredAmountOfPackage() {
         JSONObject jsonObject = customProtocol.readJsonFromFile(JsonConstants.RESUME_FILE);
@@ -191,7 +212,11 @@ public class Client extends Thread {
     }
 
     public static void main(String[] args) throws IOException {
-            Client c = new Client();
+        String FILE_BIBLE = "Bible.txt";
+        String FILE_LARGE = "MrRobot.mkv";
+        String FILE_500 = "test.mp4";
+        String FILE_TEST = "Test.txt";
+            Client c = new Client("Bible.txt");
             c.start();
 
     }

@@ -7,6 +7,7 @@ import utility.JsonConstants;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.logging.FileHandler;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
@@ -19,11 +20,13 @@ public class Server extends Thread{
     private final int PACKET_SIZE = 25000;
     private Logger logger = Logger.getLogger("Server");
     private ObjectOutputStream objectOutputStream;
-    private String filePath;
     private boolean resume = false;
-    public Server(boolean interrupt, String filePath) {
+    private ArrayList<String> listOfFiles;
+    private final String fileStorageDirectory = "C:/Temp/";
+    private String fileName;
+    public Server(boolean interrupt) {
         this.interrupt = interrupt;
-        this.filePath = filePath;
+        constructFileList();
         try {
             System.out.println("Starting server...");
             welcomeSocket = new ServerSocket(PORT);
@@ -32,6 +35,18 @@ public class Server extends Thread{
             e.printStackTrace();
         }
     }
+
+    private void constructFileList() {
+        listOfFiles = new ArrayList<>();
+        listOfFiles.add(fileStorageDirectory + "Bible.txt");
+        listOfFiles.add(fileStorageDirectory + "MrRobot.mkv");
+        listOfFiles.add(fileStorageDirectory + "test.mp4");
+    }
+
+    private boolean checkIfFileExists(String fileName) {
+        return listOfFiles.contains(fileName);
+    }
+
     public void run() {
 
         while (true) {
@@ -48,14 +63,20 @@ public class Server extends Thread{
 
 
                 JSONObject fromClient = (JSONObject) objectInputStream.readObject();
-
-                if(fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTFILE)) { // New download
-                    resume = false;
-                    sendFile(0);
-                }
-                else if (fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTBLOCK)) { // Resume download
-                    resume = true;
-                    sendFile((double)fromClient.get(JsonConstants.KEYBLOCKNUMBER));
+                // Check if the file exists on the server
+                if(checkIfFileExists((String)fromClient.get(JsonConstants.KEYFILE))) {
+                    fileName = (String) fromClient.get(JsonConstants.KEYFILE);
+                    if(fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTFILE)) { // New download
+                        resume = false;
+                        sendFile(0);
+                    }
+                    else if (fromClient.get(JsonConstants.KEYREQUEST).equals(JsonConstants.VALUEREQUESTBLOCK)) { // Resume download
+                        resume = true;
+                        sendFile((double)fromClient.get(JsonConstants.KEYBLOCKNUMBER));
+                    }
+                }else {
+                    System.out.println("The requested file does not exist on the server...");
+                    break;
                 }
 
             }catch (IOException e) {
@@ -71,7 +92,7 @@ public class Server extends Thread{
 
         try{
             logger.info("Send file to client, package already received: " + packageAlreadyReceived);
-            File fileToSend = new File(filePath);
+            File fileToSend = new File(fileName);
             double noOfPackets=Math.ceil(((fileToSend.length())/PACKET_SIZE));
             logger.info("No of packets to send:" + noOfPackets);
             BufferedInputStream bis = new BufferedInputStream(new FileInputStream(fileToSend));
@@ -80,7 +101,7 @@ public class Server extends Thread{
 
             CustomProtocol sendToClient = new CustomProtocol();
             if(!resume){
-                sendToClient.fileResponse(filePath);
+                sendToClient.fileResponse(fileName);
                 objectOutputStream.writeObject(sendToClient.getOverhead());
             }
 
@@ -140,11 +161,7 @@ public class Server extends Thread{
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {
-        String FILEPATH_BIBLE = "C:/Temp/Bible.txt";
-        String FILE_LARGE = "C:/Temp/MrRobot.mkv";
-        String FILE_500 = "C:/Temp/test.mp4";
-        String FILE_TEST = "C/:Temp/Test.txt";
-        Server s = new Server(false, FILE_LARGE);
+        Server s = new Server(false);
         s.start();
     }
 
