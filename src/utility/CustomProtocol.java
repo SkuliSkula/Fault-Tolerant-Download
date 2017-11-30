@@ -47,6 +47,12 @@ public class CustomProtocol implements Serializable {
 
     }
 
+    public void fileResponse(String filename, int blocksize) {
+        FileData fileData = new FileData(filename, blocksize);
+        overhead = fileData.getFileData();
+
+    }
+    
     public void fileResponse(String filename, byte[] data) {
         FileData fileData = new FileData(filename);
         overhead = fileData.getFileData();
