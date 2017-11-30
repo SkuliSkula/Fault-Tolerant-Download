@@ -19,7 +19,6 @@ public class JsonConstants {
     public static final String KEYPROTOCOL = "protocol";
     public static final String KEYCHECKSUM = "checksum";
     public static final String KEYRESUME = "resume";
-    public static final String KEY_IS_RESUME = "isResume";
 
     // json request values
     public static final String VALUEREQUESTFILE = "filerequest";

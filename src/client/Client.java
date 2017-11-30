@@ -27,8 +27,9 @@ public class Client extends Thread {
     private CustomProtocol customProtocol;
     private String fileName;
     private boolean appendToFile;
-    private String resume;
+    private boolean resume;
     private JSONObject configFile;
+    private JSONObject resumeFile;
     private String requestFileName;
 
     private JSONObject dataFromServer;
@@ -42,15 +43,20 @@ public class Client extends Thread {
             appendToFile = false;
             customProtocol = new CustomProtocol();
             readConfigFile();
+            readResumeFile();
         }catch (Exception e) {
             e.printStackTrace();
         }
     }
 
+    private void readResumeFile() {
+        resumeFile = customProtocol.readJsonFromFile(JsonConstants.RESUME_FILE);
+    }
+
     private void readConfigFile() {
         configFile = customProtocol.readJsonFromFile(JsonConstants.CONFIG_FILE);
         fileName = (String) configFile.get(JsonConstants.KEYFILE);
-        resume = (String) configFile.get(JsonConstants.KEY_IS_RESUME);
+        resume = (double) configFile.get(JsonConstants.KEYBLOCKNUMBER) == (double) resumeFile.get(JsonConstants.KEYRESUME);
     }
 
     public void run() {
@@ -75,7 +81,7 @@ public class Client extends Thread {
             objectOutputStream = new ObjectOutputStream(clientSocket.getOutputStream());
             objectInputStream = new ObjectInputStream(clientSocket.getInputStream());
 
-            if(resume.equals("false")) { // new file
+            if(resume) { // new file
                 appendToFile = false;
                 customProtocol.fileRequest(requestFileName);
                 objectOutputStream.writeObject(customProtocol.getOverhead());
@@ -90,7 +96,7 @@ public class Client extends Thread {
                 packageToReceive = Math.ceil(fileSize / bufferSize);
                 System.out.println("Package to receive: " + packageToReceive);
                 // Write to the config file
-                writeConfigFile(resume, requestFileName, bufferSizeLong,fileSize);
+                writeConfigFile(requestFileName, bufferSizeLong,fileSize);
 
                 receiveFile(fileName);
             }
@@ -121,9 +127,8 @@ public class Client extends Thread {
         }
     }
 
-    private void writeConfigFile(String resume, String fileName, long bufferSizeLong, long fileSize) {
+    private void writeConfigFile(String fileName, long bufferSizeLong, long fileSize) {
         JSONObject config = new JSONObject();
-        config.put(JsonConstants.KEY_IS_RESUME, resume);
         config.put(JsonConstants.KEYFILE, fileName);
         config.put(JsonConstants.KEYNUMBEROFBLOCKS, bufferSizeLong);
         config.put(JsonConstants.KEYFILESIZE, fileSize);
@@ -143,6 +148,7 @@ public class Client extends Thread {
 
             for(;;){
                 dataFromServer = (JSONObject) objectInputStream.readObject();
+                writeResumeFile((double) dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
                 bufferedOutputStream.write((byte[]) dataFromServer.get(JsonConstants.KEYDATA),0,bufferSize);
             }
 
@@ -157,10 +163,10 @@ public class Client extends Thread {
                 // client received the whole file
                 System.out.println("Whole file received");
                 writeResumeFile(0.0);
-                writeConfigFile("false",fileName,bufferSize, (long) configFile.get(JsonConstants.KEYFILESIZE));
+                writeConfigFile(fileName,bufferSize, (long) configFile.get(JsonConstants.KEYFILESIZE));
             }else {
                 writeResumeFile((double)dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
-                writeConfigFile("true",fileName,bufferSize,(long) configFile.get(JsonConstants.KEYFILESIZE));
+                writeConfigFile(fileName,bufferSize,(long) configFile.get(JsonConstants.KEYFILESIZE));
             }
 
         }
