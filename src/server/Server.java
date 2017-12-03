@@ -1,12 +1,16 @@
 package server;
 
 import org.json.simple.JSONObject;
+import utility.ChecksumUtil;
 import utility.CustomProtocol;
 import utility.JsonConstants;
+import utility.TimeUtil;
 
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.logging.FileHandler;
 import java.util.logging.Logger;
@@ -38,9 +42,9 @@ public class Server extends Thread{
 
     private void constructFileList() {
         listOfFiles = new ArrayList<>();
-        listOfFiles.add(fileStorageDirectory + "Bible.txt");
-        listOfFiles.add(fileStorageDirectory + "MrRobot.mkv");
-        listOfFiles.add(fileStorageDirectory + "test.mp4");
+        listOfFiles.add("Bible.txt");
+        listOfFiles.add("MrRobot.mkv");
+        listOfFiles.add("test.mp4");
     }
 
     private boolean checkIfFileExists(String fileName) {
@@ -75,8 +79,7 @@ public class Server extends Thread{
                         sendFile((double)fromClient.get(JsonConstants.KEYBLOCKNUMBER));
                     }
                 }else {
-                    System.out.println("The requested file does not exist on the server...");
-                    break;
+                    System.out.println("The requested file does not exist on the server: " + fileName);
                 }
 
             }catch (IOException e) {
@@ -92,19 +95,18 @@ public class Server extends Thread{
 
         try{
             logger.info("Send file to client, package already received: " + packageAlreadyReceived);
-            File fileToSend = new File(fileName);
+            File fileToSend = new File(fileStorageDirectory + fileName);
             double noOfPackets=Math.ceil(((fileToSend.length())/PACKET_SIZE));
             logger.info("No of packets to send:" + noOfPackets);
             BufferedInputStream bis = new BufferedInputStream(new FileInputStream(fileToSend));
-            long startTime = System.currentTimeMillis();
-            logger.info("startTime: " + startTime);
-
+            String md5 = ChecksumUtil.getFileCheckSum(fileName, fileStorageDirectory);
+            System.out.println("Md5 = " + md5);
             CustomProtocol sendToClient = new CustomProtocol();
             if(!resume){
-                sendToClient.fileResponse(fileName);
+                sendToClient.fileResponse(fileStorageDirectory + fileName, noOfPackets);
                 objectOutputStream.writeObject(sendToClient.getOverhead());
             }
-
+            long startTime = System.currentTimeMillis();
             for(double i=0;i<noOfPackets+1;i++) {
                 byte[] byteArray = new byte[PACKET_SIZE];
                 bis.read(byteArray, 0, byteArray.length);
@@ -128,7 +130,7 @@ public class Server extends Thread{
                 objectOutputStream.flush();
             }
             long endTime = System.currentTimeMillis();
-            timeOfOperation(startTime,endTime);
+            TimeUtil.timeOfOperation("Server sending file",startTime,endTime);
         }catch (IOException e) {
             e.printStackTrace();
         }finally {
@@ -140,12 +142,7 @@ public class Server extends Thread{
         System.out.println(Math.ceil((100*(i/noOfPackets))) + "%");
     }
 
-    private void timeOfOperation(long startTime, long endTime) {
-        long timeElapsed = endTime - startTime;
-        double seconds =  timeElapsed / 1000.0;
-        logger.info("Time: "  + seconds + " seconds");
-        logger.info("Download finished...");
-    }
+
 
     private void constructLogger() {
         FileHandler fh;
@@ -160,12 +157,9 @@ public class Server extends Thread{
         }
     }
 
-    public static void main(String[] args) throws IOException, InterruptedException {
+    public static void main(String[] args) {
         Server s = new Server(false);
         s.start();
     }
-
-
-
 }
 

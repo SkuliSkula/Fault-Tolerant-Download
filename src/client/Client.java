@@ -1,9 +1,12 @@
 package client;
 
 import org.json.simple.JSONObject;
+import utility.ChecksumUtil;
 import utility.CustomProtocol;
 import utility.JsonConstants;
+import utility.TimeUtil;
 
+import javax.annotation.processing.SupportedSourceVersion;
 import java.io.*;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
@@ -25,7 +28,6 @@ public class Client extends Thread {
     private ObjectOutputStream objectOutputStream;
     private ObjectInputStream objectInputStream;
     private CustomProtocol customProtocol;
-    private String fileName;
     private boolean appendToFile;
     private boolean resume;
     private JSONObject configFile;
@@ -51,12 +53,13 @@ public class Client extends Thread {
 
     private void readResumeFile() {
         resumeFile = customProtocol.readJsonFromFile(JsonConstants.RESUME_FILE);
+        resume =(double) resumeFile.get(JsonConstants.KEYRESUME) <
+                (double) configFile.get(JsonConstants.KEYNUMBEROFBLOCKS) &&
+                (double) configFile.get(JsonConstants.KEYNUMBEROFBLOCKS) > 0;
     }
 
     private void readConfigFile() {
         configFile = customProtocol.readJsonFromFile(JsonConstants.CONFIG_FILE);
-        fileName = (String) configFile.get(JsonConstants.KEYFILE);
-        resume = (double) configFile.get(JsonConstants.KEYBLOCKNUMBER) == (double) resumeFile.get(JsonConstants.KEYRESUME);
     }
 
     public void run() {
@@ -81,30 +84,26 @@ public class Client extends Thread {
             objectOutputStream = new ObjectOutputStream(clientSocket.getOutputStream());
             objectInputStream = new ObjectInputStream(clientSocket.getInputStream());
 
-            if(resume) { // new file
+            if(!resume) { // new file
+                System.out.println("New file...");
                 appendToFile = false;
+                // Request a file
                 customProtocol.fileRequest(requestFileName);
+                // Send the request to the server
                 objectOutputStream.writeObject(customProtocol.getOverhead());
                 // Get message back from the server
                 JSONObject fromServer = (JSONObject) objectInputStream.readObject();
-
-                //Calculate how many package the client will receive
-                fileName = (String) fromServer.get(JsonConstants.KEYFILE);
-                long fileSize = (long) fromServer.get(JsonConstants.KEYFILESIZE);
-                long bufferSizeLong = (long) fromServer.get(JsonConstants.KEYBLOCKSIZE);
-                //bufferSize = toIntExact(bufferSizeLong);
-                packageToReceive = Math.ceil(fileSize / bufferSize);
-                System.out.println("Package to receive: " + packageToReceive);
-                // Write to the config file
-                writeConfigFile(requestFileName, bufferSizeLong,fileSize);
-
-                receiveFile(fileName);
+                // Write to the response to config file
+                customProtocol.writeJsonToFile(JsonConstants.CONFIG_FILE, fromServer);
+                // Start receiving the file
+                receiveFile(requestFileName);
             }
             else{ // Resume download
+                System.out.println("Resume download...");
                 // Check how many package we already received
                 double savedNoPackage = getStoredAmountOfPackage();
                 // Get the fileName from the config file
-                fileName = (String) configFile.get(JsonConstants.KEYFILE);
+                String fileName = (String) configFile.get(JsonConstants.KEYFILE);
                 // Create a message to the server
                 customProtocol.blockRequest(fileName,0, savedNoPackage);
                 // Send a request to the server
@@ -127,25 +126,13 @@ public class Client extends Thread {
         }
     }
 
-    private void writeConfigFile(String fileName, long bufferSizeLong, long fileSize) {
-        JSONObject config = new JSONObject();
-        config.put(JsonConstants.KEYFILE, fileName);
-        config.put(JsonConstants.KEYNUMBEROFBLOCKS, bufferSizeLong);
-        config.put(JsonConstants.KEYFILESIZE, fileSize);
-        try{
-            customProtocol.writeJsonToFile(JsonConstants.CONFIG_FILE, config);
-        }catch (IOException e){
-            System.out.println("Could not write the config file: " + e.getMessage());
-        }
-
-    }
-
     private void receiveFile(String fileName) throws IOException {
             System.out.println("receiveFile...");
+            long startTime = 0;
         try{
             fileOutputStream = new FileOutputStream(fileStorageLocation +fileName, appendToFile);
             bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
-
+            startTime = System.currentTimeMillis();
             for(;;){
                 dataFromServer = (JSONObject) objectInputStream.readObject();
                 writeResumeFile((double) dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
@@ -155,20 +142,12 @@ public class Client extends Thread {
         }catch (SocketTimeoutException e) {
             // Timeout store the received data
             System.out.println("Timeout...");
-            writeResumeFile((int)dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
         }catch (EOFException e) {
             // End of the stream
-            System.out.println("End of stream...");
-            if(dataFromServer.get(JsonConstants.KEYBLOCKNUMBER) == configFile.get(JsonConstants.KEYNUMBEROFBLOCKS)){
-                // client received the whole file
-                System.out.println("Whole file received");
-                writeResumeFile(0.0);
-                writeConfigFile(fileName,bufferSize, (long) configFile.get(JsonConstants.KEYFILESIZE));
-            }else {
-                writeResumeFile((double)dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
-                writeConfigFile(fileName,bufferSize,(long) configFile.get(JsonConstants.KEYFILESIZE));
-            }
-
+            long endTime = System.currentTimeMillis();
+            TimeUtil.timeOfOperation("Client receiving file",startTime,endTime);
+            String md5 = ChecksumUtil.getFileCheckSum(requestFileName,fileStorageLocation);
+            System.out.println("Client MD5 = " + md5);
         }
         catch (IOException e) {
             e.printStackTrace();

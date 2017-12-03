@@ -47,10 +47,10 @@ public class CustomProtocol implements Serializable {
 
     }
 
-    public void fileResponse(String filename, byte[] data) {
+    public void fileResponse(String filename, double numberOfBlocks) {
         FileData fileData = new FileData(filename);
         overhead = fileData.getFileData();
-        overhead.put(JsonConstants.KEYDATA, data);
+        overhead.put(JsonConstants.KEYNUMBEROFBLOCKS, numberOfBlocks);
 
     }
 
@@ -73,7 +73,6 @@ public class CustomProtocol implements Serializable {
     public void writeJsonToFile(String filePath, JSONObject jsonObject) throws IOException{
         try(FileWriter file = new FileWriter(filePath)) {
             file.write(jsonObject.toJSONString());
-            System.out.println("json file created at " + filePath + ", values: " + jsonObject.toJSONString());
         }
     }
 

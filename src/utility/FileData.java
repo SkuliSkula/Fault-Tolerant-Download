@@ -10,13 +10,13 @@ import org.json.simple.JSONObject;
 public class FileData {
 
     private File file;
-    private long blocksize = 30000;
+    private double blocksize = 30000;
 
     public FileData(String path){
         file = new File(path);
     }
 
-    public FileData(String path, long blocksize ){
+    public FileData(String path, double blocksize ){
         file = new File(path);
         this.blocksize = blocksize;
     }
