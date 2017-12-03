@@ -6,25 +6,21 @@ import utility.CustomProtocol;
 import utility.JsonConstants;
 import utility.TimeUtil;
 
-import javax.annotation.processing.SupportedSourceVersion;
 import java.io.*;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 
-public class Client extends Thread {
+public class FaultTolerantClient extends Thread {
 
     private int PORT = 6789;
     private String HOST = "localhost";
     private final String fileStorageLocation = "C:/Temp/Test/";
 
-    private int command;
-    private BufferedReader inFromUser;
     private Socket clientSocket;
     private FileOutputStream fileOutputStream;
     private BufferedOutputStream bufferedOutputStream;
 
-    private int bufferSize;
-    private double packageToReceive;
+    private int bufferSize; // Packet size
     private ObjectOutputStream objectOutputStream;
     private ObjectInputStream objectInputStream;
     private CustomProtocol customProtocol;
@@ -33,15 +29,13 @@ public class Client extends Thread {
     private JSONObject configFile;
     private JSONObject resumeFile;
     private String requestFileName;
-
+    private double packageReceived;
     private JSONObject dataFromServer;
-    public Client(String requestFileName) {
+    public FaultTolerantClient(String requestFileName, int bufferSize) {
         this.requestFileName = requestFileName;
+        this.bufferSize = bufferSize;
         try{
-
-            inFromUser = new BufferedReader(new InputStreamReader(System.in));
-            packageToReceive = 0;
-            bufferSize = 25000; // Default buffer size
+            packageReceived = 0;
             appendToFile = false;
             customProtocol = new CustomProtocol();
             readConfigFile();
@@ -62,33 +56,27 @@ public class Client extends Thread {
         configFile = customProtocol.readJsonFromFile(JsonConstants.CONFIG_FILE);
     }
 
-    public void run() {
-
-        do {
-            try {
-                menu();
-            }catch (IOException e) {
-                e.printStackTrace();
-            }
-
-        }while (command != 2);
+    public synchronized void run() {
+        try {
+            requestDownload();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private void requestDownload() throws IOException {
 
         try {
             clientSocket = new Socket(HOST,PORT);
-            System.out.println("Connecting...");
 
             // Create the streams to send and receive Message objects
             objectOutputStream = new ObjectOutputStream(clientSocket.getOutputStream());
             objectInputStream = new ObjectInputStream(clientSocket.getInputStream());
 
             if(!resume) { // new file
-                System.out.println("New file...");
                 appendToFile = false;
                 // Request a file
-                customProtocol.fileRequest(requestFileName);
+                customProtocol.fileRequest(requestFileName, bufferSize);
                 // Send the request to the server
                 objectOutputStream.writeObject(customProtocol.getOverhead());
                 // Get message back from the server
@@ -99,13 +87,12 @@ public class Client extends Thread {
                 receiveFile(requestFileName);
             }
             else{ // Resume download
-                System.out.println("Resume download...");
                 // Check how many package we already received
                 double savedNoPackage = getStoredAmountOfPackage();
                 // Get the fileName from the config file
                 String fileName = (String) configFile.get(JsonConstants.KEYFILE);
                 // Create a message to the server
-                customProtocol.blockRequest(fileName,0, savedNoPackage);
+                customProtocol.blockRequest(fileName,bufferSize, savedNoPackage);
                 // Send a request to the server
                 objectOutputStream.writeObject(customProtocol.getOverhead());
                 appendToFile = true;
@@ -127,33 +114,44 @@ public class Client extends Thread {
     }
 
     private void receiveFile(String fileName) throws IOException {
-            System.out.println("receiveFile...");
             long startTime = 0;
         try{
-            fileOutputStream = new FileOutputStream(fileStorageLocation +fileName, appendToFile);
+            InputStream inputStream = clientSocket.getInputStream();
+            fileOutputStream = new FileOutputStream(fileStorageLocation + "FT" +fileName, appendToFile);
             bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
             startTime = System.currentTimeMillis();
-            for(;;){
+            int count;
+            int counter = 0;
+            byte[] buffer = new byte[bufferSize];
+            while ((count = inputStream.read(buffer))> 0) {
+                bufferedOutputStream.write(buffer,0,count);
+                bufferedOutputStream.flush();
+                writeResumeFile(counter++);
+            }
+            long endTime = System.currentTimeMillis();
+            TimeUtil.timeOfOperation("Fault tolerant receiving",startTime,endTime);
+            /*for(;;){
                 dataFromServer = (JSONObject) objectInputStream.readObject();
                 writeResumeFile((double) dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
-                bufferedOutputStream.write((byte[]) dataFromServer.get(JsonConstants.KEYDATA),0,bufferSize);
-            }
+                bufferedOutputStream.write((byte[]) dataFromServer.get(JsonConstants.KEYDATA));
+                bufferedOutputStream.flush();
+                dataFromServer = null;
+            }*/
 
         }catch (SocketTimeoutException e) {
             // Timeout store the received data
             System.out.println("Timeout...");
         }catch (EOFException e) {
             // End of the stream
-            long endTime = System.currentTimeMillis();
-            TimeUtil.timeOfOperation("Client receiving file",startTime,endTime);
-            String md5 = ChecksumUtil.getFileCheckSum(requestFileName,fileStorageLocation);
-            System.out.println("Client MD5 = " + md5);
+
+
+
         }
         catch (IOException e) {
             e.printStackTrace();
-        }catch (ClassNotFoundException e) {
+        }/*catch (ClassNotFoundException e) {
             e.printStackTrace();
-        }
+        }*/
         finally {
             if (fileOutputStream != null) fileOutputStream.close();
             if (bufferedOutputStream != null) bufferedOutputStream.close();
@@ -175,35 +173,6 @@ public class Client extends Thread {
     private double getStoredAmountOfPackage() {
         JSONObject jsonObject = customProtocol.readJsonFromFile(JsonConstants.RESUME_FILE);
         return (double) jsonObject.get(JsonConstants.KEYRESUME);
-    }
-    // The options displayed to the client
-    private void menu() throws IOException {
-        System.out.println();
-        System.out.println("Welcome... Select an option to continue");
-        System.out.println("1: Download a file");
-        System.out.println("2: Disconnect");
-        System.out.println();
-        command = Integer.parseInt(inFromUser.readLine());
-
-        switch (command) {
-            case 1:
-                requestDownload();
-                break;
-            case 2:
-                break;
-            default:
-                break;
-        }
-    }
-
-    public static void main(String[] args) throws IOException {
-        String FILE_BIBLE = "Bible.txt";
-        String FILE_LARGE = "MrRobot.mkv";
-        String FILE_500 = "test.mp4";
-        String FILE_TEST = "Test.txt";
-            Client c = new Client("Bible.txt");
-            c.start();
-
     }
 }
 

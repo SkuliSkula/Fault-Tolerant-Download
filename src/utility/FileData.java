@@ -10,16 +10,12 @@ import org.json.simple.JSONObject;
 public class FileData {
 
     private File file;
-    private double blocksize = 30000;
+
 
     public FileData(String path){
         file = new File(path);
     }
 
-    public FileData(String path, double blocksize ){
-        file = new File(path);
-        this.blocksize = blocksize;
-    }
 
     // Returns metadata about the file in a json-object
     public JSONObject getFileData(){
@@ -27,8 +23,6 @@ public class FileData {
         long filesize = file.length();
         filedata.put(JsonConstants.KEYFILESIZE, filesize);
         filedata.put(JsonConstants.KEYFILE, file.getName());
-        filedata.put(JsonConstants.KEYBLOCKSIZE, blocksize);
-        filedata.put(JsonConstants.KEYNUMBEROFBLOCKS, (int) Math.ceil(filesize/blocksize));
 
         return filedata;
     }

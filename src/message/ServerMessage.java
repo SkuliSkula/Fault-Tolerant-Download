@@ -8,7 +8,7 @@ public class ServerMessage implements Serializable {
     private double fileSize;
 
     public ServerMessage() {
-        this.message = "";
+        this.message = "Download";
         this.packetSize = 0;
         this.fileSize = 0.0;
     }
