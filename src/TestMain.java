@@ -30,7 +30,7 @@ public class TestMain {
             public void run(){
                 FaultTolerantServer faultTolerantServer = new FaultTolerantServer(false);
                 faultTolerantServer.start();
-                FaultTolerantClient faultTolerantClient = new FaultTolerantClient("test.mp4", 10000);
+                FaultTolerantClient faultTolerantClient = new FaultTolerantClient("test.mp4", 20000);
                 faultTolerantClient.start();
             }
         });

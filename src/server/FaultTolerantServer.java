@@ -100,13 +100,11 @@ public class FaultTolerantServer extends Thread{
             for(double i=0;i<noOfPackets + 1;i++) {
                 byte[] byteArray = new byte[packetSize];
                 bis.read(byteArray, 0, byteArray.length);
-                //sendToClient.simpleSend(byteArray,i);
-                OutputStream os = connectionSocket.getOutputStream();
-                // If packageAlreadyReceived is less then current package then don't send them
-                if(i < packageAlreadyReceived && packageAlreadyReceived != 0) {
-
-                }else{
-                    os.write(byteArray,0,byteArray.length);
+                sendToClient.simpleSend(byteArray,i);
+                showDownloadStatus(i,noOfPackets);
+                // Validate if the package should be sent or not
+                if(!(i <= packageAlreadyReceived && packageAlreadyReceived != 0)) {
+                    objectOutputStream.writeObject(sendToClient.getOverhead());
                 }
 
                 // Fake connection interruption (selected in the constructor)

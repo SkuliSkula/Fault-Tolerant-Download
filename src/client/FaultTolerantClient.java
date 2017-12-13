@@ -29,13 +29,11 @@ public class FaultTolerantClient extends Thread {
     private JSONObject configFile;
     private JSONObject resumeFile;
     private String requestFileName;
-    private double packageReceived;
     private JSONObject dataFromServer;
     public FaultTolerantClient(String requestFileName, int bufferSize) {
         this.requestFileName = requestFileName;
         this.bufferSize = bufferSize;
         try{
-            packageReceived = 0;
             appendToFile = false;
             customProtocol = new CustomProtocol();
             readConfigFile();
@@ -116,42 +114,31 @@ public class FaultTolerantClient extends Thread {
     private void receiveFile(String fileName) throws IOException {
             long startTime = 0;
         try{
-            InputStream inputStream = clientSocket.getInputStream();
             fileOutputStream = new FileOutputStream(fileStorageLocation + "FT" +fileName, appendToFile);
             bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
             startTime = System.currentTimeMillis();
-            int count;
-            int counter = 0;
-            byte[] buffer = new byte[bufferSize];
-            while ((count = inputStream.read(buffer))> 0) {
-                bufferedOutputStream.write(buffer,0,count);
-                bufferedOutputStream.flush();
-                writeResumeFile(counter++);
-            }
-            long endTime = System.currentTimeMillis();
-            TimeUtil.timeOfOperation("Fault tolerant receiving",startTime,endTime);
-            /*for(;;){
+
+            for(;;){
                 dataFromServer = (JSONObject) objectInputStream.readObject();
                 writeResumeFile((double) dataFromServer.get(JsonConstants.KEYBLOCKNUMBER));
-                bufferedOutputStream.write((byte[]) dataFromServer.get(JsonConstants.KEYDATA));
+                bufferedOutputStream.write((byte[]) dataFromServer.get(JsonConstants.KEYDATA),0,bufferSize);
                 bufferedOutputStream.flush();
                 dataFromServer = null;
-            }*/
+            }
 
         }catch (SocketTimeoutException e) {
             // Timeout store the received data
             System.out.println("Timeout...");
         }catch (EOFException e) {
             // End of the stream
-
-
-
+            long endTime = System.currentTimeMillis();
+            TimeUtil.timeOfOperation("Fault tolerant receiving",startTime,endTime);
         }
         catch (IOException e) {
             e.printStackTrace();
-        }/*catch (ClassNotFoundException e) {
+        }catch (ClassNotFoundException e) {
             e.printStackTrace();
-        }*/
+        }
         finally {
             if (fileOutputStream != null) fileOutputStream.close();
             if (bufferedOutputStream != null) bufferedOutputStream.close();
