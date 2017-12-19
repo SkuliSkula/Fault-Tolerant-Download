@@ -1,7 +1,6 @@
 package server;
 
 import org.json.simple.JSONObject;
-import utility.ChecksumUtil;
 import utility.CustomProtocol;
 import utility.JsonConstants;
 import utility.TimeUtil;
@@ -85,7 +84,6 @@ public class FaultTolerantServer extends Thread{
     }
 
     private void sendFile(double packageAlreadyReceived) throws IOException {
-
         try{
             File fileToSend = new File(fileStorageDirectory + fileName);
             double noOfPackets=Math.ceil(((fileToSend.length())/packetSize));
